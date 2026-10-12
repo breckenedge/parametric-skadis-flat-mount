@@ -16,6 +16,10 @@ face_height = 60; // [20:1:400]
 // Thickness of the face plate (mm)
 face_depth = 4; // [2:0.5:15]
 
+/* [Printing] */
+// Add breakaway supports under each hook lip
+supports = false;
+
 /* [Hidden] */
 $fn = 32;
 
@@ -31,10 +35,19 @@ board_t = 5;
 tab_w = 4.4;            // across the 5 mm slot width
 tab_h = 7.5;            // tab height resting on the slot's bottom edge
 lip_h = 5.5;            // how far the lip hangs below the slot behind the board
-lip_t = 3;              // lip thickness
+lip_t = 4.5;            // lip thickness
+lip_catch = 3;          // flat part of the lip that bears on the board; the
+                        // rest slopes at 45° so it prints without support
 gap = board_t + 0.4;    // space for the board between plate and lip
 margin = 2;             // keep tabs this far inside the plate edges
 corner_r = 2;
+
+// Breakaway supports under each hook lip: thin fins rising from the plate,
+// stopping one layer short of the lip so they snap off cleanly.
+sup_fin_t = 0.8;        // fin thickness
+sup_pitch = 2;          // fin spacing (the lip bridges between fins)
+sup_z_gap = 0.2;        // air gap under the lip (about one layer)
+sup_xy_gap = 0.6;       // clearance from the tab
 
 W = face_width;
 H = face_height;
@@ -99,12 +112,29 @@ module hook(xc, yb) {
                     [yb + tab_h - 1, z2],
                     [yb - lip_h + 1.5, z2],           // lead-in chamfer
                     [yb - lip_h, z2 - 1.5],
-                    [yb - lip_h, z1 + 0.6],
-                    [yb - lip_h + 0.6, z1],
+                    [yb - lip_h, z1 + lip_h - lip_catch],  // 45° underside
+                    [yb - lip_catch, z1],
                     [yb, z1],
                 ]);
 }
 
+// Fins spanning the tab width, spaced under the flat part of the lip.
+module lip_support(xc, yb) {
+    h = gap - sup_z_gap;
+    y_near = yb - sup_xy_gap - sup_fin_t;
+    y_far = yb - lip_catch;   // only the flat part overhangs
+    n = ceil((y_near - y_far) / sup_pitch) + 1;
+    for (i = [0 : n - 1])
+        let(y = y_near - i * (y_near - y_far) / (n - 1))
+        translate([xc - tab_w / 2, y, T - 0.01])
+            cube([tab_w, sup_fin_t, h + 0.01]);
+}
+
+module mount_hook(xc, yb) {
+    hook(xc, yb);
+    if (supports) lip_support(xc, yb);
+}
+
 plate();
-for (x = top_xs) hook(x, yb_top);
-if (n_rows > 1) for (x = bot_xs) hook(x, yb_bottom);
+for (x = top_xs) mount_hook(x, yb_top);
+if (n_rows > 1) for (x = bot_xs) mount_hook(x, yb_bottom);
